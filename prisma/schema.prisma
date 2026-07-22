@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Volume {
+  id              Int      @id @default(autoincrement())
+  number          Int      @unique   // Tập 1, 2, 3...
+  title           String              // ví dụ: "當代中文課程 第一冊"
+  cefrLevel       String?             // ví dụ "A1", "A2", "B1"... gán 1 lần cho cả tập
+  sgkPdfPath      String?
+  sbtPdfPath      String?
+  teacherPdfPath  String?
+  sgkOffset       Int?
+  sbtOffset       Int?
+  teacherOffset   Int?
+  lessons         Lesson[]
+}
+
+model Lesson {
+  id               Int             @id @default(autoincrement())
+  volumeId         Int
+  volume           Volume          @relation(fields: [volumeId], references: [id])
+  number           Int                          // Bài 1, 2, 3...
+  title            String                       // tiêu đề bài học
+  sgkPageStart     Int?
+  sgkPageEnd       Int?
+  sbtPageStart     Int?
+  sbtPageEnd       Int?
+  teacherPageStart Int?
+  teacherPageEnd   Int?
+  sbtAnswerPageStart Int?
+  sbtAnswerPageEnd   Int?
+  sgkCutPath       String?
+  sbtCutPath       String?
+  teacherCutPath   String?
+  sbtAnswerCutPath String?
+  vocabulary       Vocabulary[]
+  dialogues        Dialogue[]
+  grammarPoints    GrammarPoint[]
+  backups          LessonBackup[]
+
+  @@unique([volumeId, number])
+}
+
+model Vocabulary {
+  id           Int                 @id @default(autoincrement())
+  lessonId     Int
+  lesson       Lesson              @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  order        Int                                 // thứ tự xuất hiện trong bài
+  hanzi        String
+  pinyin       String
+  meaningVi    String                              // nghĩa tiếng Việt
+  partOfSpeech String?                             // từ loại, nếu sách có ghi
+  exampleHanzi String?                             // câu ví dụ nếu có
+  examplePinyin String?
+  exampleVi    String?
+  progress     VocabularyProgress?
+}
+
+model Dialogue {
+  id             Int               @id @default(autoincrement())
+  lessonId       Int
+  lesson         Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  dialogueNumber Int                               // Hội thoại 1, 2...
+  lineOrder      Int                               // thứ tự câu trong hội thoại
+  speaker        String?                           // tên nhân vật nói, nếu có
+  hanzi          String
+  pinyin         String?                           // phiên âm Pinyin (optional)
+  meaningVi      String
+  audioUrl       String?                           // đường dẫn tới audio gốc sách (cả câu/đoạn)
+  progress       DialogueProgress?
+}
+
+model GrammarPoint {
+  id          Int              @id @default(autoincrement())
+  lessonId    Int
+  lesson      Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  order       Int                          // điểm ngữ pháp 1, 2...
+  title       String                       // tiêu đề điểm ngữ pháp
+  sections    GrammarSection[]
+}
+
+model GrammarSection {
+  id             Int             @id @default(autoincrement())
+  grammarPointId Int
+  grammarPoint   GrammarPoint    @relation(fields: [grammarPointId], references: [id], onDelete: Cascade)
+  parentId       Int?                        // để lồng section con vào section cha
+  parent         GrammarSection? @relation("SectionChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children       GrammarSection[] @relation("SectionChildren")
+  order          Int
+  label          String                       // ví dụ: "Cấu trúc", "Phủ định"
+  level          String                       // "main" hoặc "sub"
+  text           String                       // nội dung giải thích
+  examples       GrammarExample[]
+}
+
+model GrammarExample {
+  id        Int             @id @default(autoincrement())
+  sectionId Int
+  section   GrammarSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  order     Int
+  groupOrder Int            @default(1) // Số thứ tự nhóm (ví dụ 1, 2, 3...)
+  hanzi     String
+  pinyin    String
+  meaningVi String
+}
+
+model VocabularyProgress {
+  id             Int        @id @default(autoincrement())
+  vocabularyId   Int        @unique
+  vocabulary     Vocabulary @relation(fields: [vocabularyId], references: [id], onDelete: Cascade)
+  easeFactor     Float      @default(2.5)
+  intervalDays   Int        @default(0)
+  repetitions    Int        @default(0)
+  nextReviewAt   DateTime?
+  lastReviewedAt DateTime?
+  lastResult     String?          // "again"/"hard"/"good"/"easy"
+  masteredAt     DateTime?        // set khi đạt mốc "thuộc", null nếu chưa
+}
+
+model DialogueProgress {
+  id              Int      @id @default(autoincrement())
+  dialogueId      Int      @unique
+  dialogue        Dialogue @relation(fields: [dialogueId], references: [id], onDelete: Cascade)
+  practiceCount   Int      @default(0)
+  lastPracticedAt DateTime?
+}
+
+model LessonBackup {
+  id        Int      @id @default(autoincrement())
+  lessonId  Int
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  type      String   // "vocab" | "dialogue" | "grammar"
+  action    String   // "BEFORE_IMPORT" | "BEFORE_DELETE" | "MANUAL"
+  note      String?  // ví dụ: "Sao lưu tự động trước khi import mới (4 điểm ngữ pháp)"
+  data      String   // JSON stringified snapshot of the items
+  createdAt DateTime @default(now())
+}
